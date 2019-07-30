@@ -100,7 +100,8 @@ void correlate(int ny, int nx, const float* data, float* result) {
 
 #if 1
 	{ // Record SM cycle timestamps of every memory access to device_data
-		const int max_access_count = 65536;
+		// This magic number comes from running the Counter wrapper (in the previous block) on the input data
+		const int max_access_count = 16384;
 		const int num_blocks = dimGrid.x * dimGrid.y * dimGrid.z;
 		Recorder recorder(device_data, num_blocks, max_access_count);
 		row_dot_products<<<dimGrid, dimBlock>>>(ny, nx, recorder, device_result);
@@ -131,8 +132,8 @@ float next_float() {
 __host__
 int main() {
 	// Generate data
-	int nx = 128;
-	int ny = 128;
+	int nx = 32;
+	int ny = 32;
 	std::vector<float> matrix(nx * ny);
 	std::generate(matrix.begin(), matrix.end(), next_float);
 	std::vector<float> result(nx * ny);
