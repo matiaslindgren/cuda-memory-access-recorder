@@ -1,0 +1,38 @@
+<!DOCTYPE HTML>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="language" content="english">
+    <meta name="viewport" content="width=device-width">
+    <title>CUDA memory access</title>
+    <!--
+      <div>Icons made by <a href="http://www.freepik.com" title="Freepik">Freepik</a> from <a href="https://www.flaticon.com/" title="Flaticon">www.flaticon.com</a> is licensed by <a href="http://creativecommons.org/licenses/by/3.0/" title="Creative Commons BY 3.0" target="_blank">CC 3.0 BY</a></div>
+    -->
+    <link href="img/chip.png" rel="icon">
+    <link href="src/main.css" rel="stylesheet">
+  </head>
+  <body>
+    <div hidden id="body-error-banner" class="body-error-banner"></div>
+    <noscript>
+      <div class="body-error-banner">JavaScript is not enabled, unable to run animation</div>
+    </noscript>
+    <div class="menubar">
+      <b><pre>Access pattern file</pre></b>
+      <input type="file" id="access-patterns-file" accept="text/plain">
+      <b><pre>Animation control</pre></b>
+      <input id="restart-button" type="button" value="Restart"/>
+      <input id="pause-button" type="button" value="Pause"/>
+      <select id="memory-slot-size-select"></select>
+    </div>
+    <div id="memoryCanvasContainer" class="column canvas-container">
+      <h3><pre>Global device memory (DRAM)</pre></h3>
+        <pre hidden id="memoryMessages" class="kernel-message"></pre>
+        <canvas id="memoryCanvasInput"></canvas>
+    </div>
+    <script src="src/kernels.js"></script>
+    <script src="src/config.js"></script>
+    <script src="src/lib.js"></script>
+    <script src="src/main.js"></script>
+  </body>
+</html>
+
