@@ -79,6 +79,7 @@ function initUI() {
 		console.log("Parsing", file.name, "of size", file.size);
 		const filePromise = new Response(file.slice(0, file.size - 1)).text();
 		filePromise.then(content => {
+			let invalidIndexCount = 0;
 			const lines = content.split('\n');
 			for (let line of lines.slice(1)) {
 				let [index, cycle] = line.split('\t').map(x => parseInt(x));
@@ -87,8 +88,12 @@ function initUI() {
 				} else {
 					accessPatterns.get(cycle).add(index);
 				}
+				invalidIndexCount += index > memoryRowCount * memoryColumnCount;
 			}
 			console.log("Parsed", accessPatterns.size, "memory access events");
+			if (invalidIndexCount > 0) {
+				console.warn(invalidIndexCount, "indexes are out of range, the current device memory canvas does not have enough slots to show them");
+			}
 			if (stepsPerCycle > 1) {
 				accessPatterns = groupAccessPatterns(accessPatterns, stepsPerCycle);
 			}
