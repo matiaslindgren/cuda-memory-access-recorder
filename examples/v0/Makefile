@@ -1,5 +1,5 @@
 NVCC=nvcc
-NVCCFLAGS=--std=c++14 -O3 -I../include
+NVCCFLAGS=--std=c++14 -O3 -I../../include
 MAIN_SRC=main.cu
 OUTPUT_DIR=bin
 

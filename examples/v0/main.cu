@@ -39,7 +39,7 @@ void mykernel(float* r, Wrapper d, int n) {
 }
 
 
-inline int divup(int a, int b) {
+inline int static divup(int a, int b) {
 	return (a + b - 1) / b;
 }
 
@@ -70,7 +70,7 @@ void step(float* r, const float* d, int n) {
 	{
 		// Record SM cycle timestamps of every memory access to device_data
 		// This magic number comes from running the Counter wrapper (in the previous block) on the input data
-		const int max_access_count = 65536;
+		const int max_access_count = 32768;
 		const int num_blocks = dimGrid.x * dimGrid.y * dimGrid.z;
 		Wrapper recorder(dGPU, num_blocks, max_access_count);
 		mykernel<<<dimGrid, dimBlock>>>(rGPU, recorder, n);
@@ -100,7 +100,7 @@ float next_float() {
 __host__
 int main() {
 	// Generate data
-	int n = 128;
+	int n = 64;
 	std::vector<float> matrix(n * n);
 	std::generate(matrix.begin(), matrix.end(), next_float);
 	std::vector<float> result(n * n);
@@ -108,6 +108,5 @@ int main() {
 	step(result.data(), matrix.data(), n);
 	// Write output
 	std::ofstream outf(results_out_path);
-	outf << n << " " << n << "\n";
 	std::copy(result.begin(), result.end(), std::ostream_iterator<float>(outf, " "));
 }
