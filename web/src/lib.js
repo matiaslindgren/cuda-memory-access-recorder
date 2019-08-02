@@ -33,9 +33,9 @@ class Drawable {
 class DeviceMemory extends Drawable {
 	// Global device memory space represented as a matrix of squares,
 	// where each square is a single memory address.
-	constructor(canvas, slotSize, accessPatterns) {
-		const rows = CONFIG.memory.rows;
-		const columns = CONFIG.memory.columns;
+	constructor(canvas, memoryColumnCount, memoryRowCount, slotSize, accessPatterns) {
+		const rows = memoryRowCount;
+		const columns = memoryColumnCount;
 		const slotPadding = CONFIG.memory.slotPadding;
 		const width = columns * slotSize + slotPadding * columns;
 		let height = rows * slotSize + slotPadding * rows;

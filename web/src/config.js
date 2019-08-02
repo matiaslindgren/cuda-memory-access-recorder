@@ -64,13 +64,10 @@ const CONFIG = {
 		// Empty space between each slot on all sides
 		slotPadding: 1,
 		slotSizes: {
-			min: 8,
+			min: 4,
 			max: 36,
 			step: 4,
 		},
-		//FIXME from submitted file
-		rows: 32,
-		columns: 32,
 		slotFillRGBA: [160, 160, 160, 0.2],
 		// Amount of animation steps of the cooldown transition after touching a memory index
 		coolDownPeriod: 20,
