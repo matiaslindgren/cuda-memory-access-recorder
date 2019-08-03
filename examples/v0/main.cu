@@ -67,7 +67,9 @@ void step(float* r, const float* d, int n) {
 	// We will be making 2 passes over the data by calling mykernel twice
 	// 1. Compute amount of required space to store all accesses
 	// 2. Record all accesses and timestamps
+	unsigned long long max_access_count = 0u;
 	{
+		std::cout << "Running AccessCounter\n";
 		// Compute the maximum amount of accesses a thread block will make
 		pr::AccessCounter<float> counter(dGPU, dimGrid);
 		mykernel<pr::AccessCounter<float> ><<<dimGrid, dimBlock>>>(rGPU, counter, n);
@@ -75,11 +77,16 @@ void step(float* r, const float* d, int n) {
 		CHECK(cudaDeviceSynchronize());
 		// Show a small summary of memory access counts (not required)
 		counter.dump_access_statistics(std::cout);
+		max_access_count = counter.get_max_access_count();
+	}
+	{
+		std::cout << "Running PatternRecorder\n";
 		// Allocate device memory for all possible accesses and record the actual access pattern
-		pr::PatternRecorder<float> recorder(dGPU, dimGrid, counter.get_max_access_count());
+		pr::PatternRecorder<float> recorder(dGPU, dimGrid, max_access_count);
 		mykernel<pr::PatternRecorder<float> ><<<dimGrid, dimBlock>>>(rGPU, recorder, n);
 		// Again, sync to make sure the kernel call has been finished
 		CHECK(cudaDeviceSynchronize());
+		recorder.dump_access_statistics(std::cout);
 		// Write results as JSON somewhere and specify number of rows and columns in the array that is being accessed
 		std::ofstream outf(patterns_out_path);
 		recorder.dump_json_results(outf, n, n);

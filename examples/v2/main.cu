@@ -128,6 +128,7 @@ void step(float* r, const float* d, int n) {
 		mykernel<pr::PatternRecorder<float> ><<<dimGrid, dimBlock>>>(rGPU, recorder, n, nn);
 		CHECK(cudaDeviceSynchronize());
 		std::ofstream outf(patterns_out_path);
+		recorder.dump_access_statistics(std::cout);
 		recorder.dump_json_results(outf, nn, nn);
 	}
 
