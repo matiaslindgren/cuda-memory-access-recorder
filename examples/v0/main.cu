@@ -110,6 +110,7 @@ void step(float* r, const float* d, int n) {
 		// Write results as JSON somewhere and specify number of rows and columns in the array that is being accessed
 		std::ofstream outf(patterns_out_path);
 		recorder.dump_json_results(outf, n, n);
+		std::cout << "Wrote " << patterns_out_path << "\n";
 	}
 
 	CHECK(cudaGetLastError());
