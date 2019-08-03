@@ -13,10 +13,13 @@
 #include <cassert>
 #include <cuda_runtime.h>
 
+// You can set the verbosity in your program before you include this header
 // 0 quiet (except when explicitly calling ostream write methods)
 // 1 informative
 // 2 insanity
+#ifndef PR_VERBOSITY
 #define PR_VERBOSITY 0
+#endif
 
 // When the amount of memory required to store all access patterns exceeds this size, print a warning
 #define MAX_BYTES_WARNING_LIMIT 200000000 /* 200M */
@@ -29,6 +32,7 @@ inline void check(cudaError_t err, const char* file, int lineno, const char* con
 		std::cerr
 			<< "CUDA error in '" << file << "' at line " << lineno << ":\n" << context << "\n"
 			<< "Error string is '" << cudaGetErrorString(err) << "'\n";
+		cudaDeviceReset();
 		std::exit(EXIT_FAILURE);
 	}
 }
@@ -106,6 +110,15 @@ public:
 #if (PR_VERBOSITY > 0)
 		std::cerr << "Trying to allocate " << total_memory_required << " bytes on the device\n";
 #endif
+#if (PR_VERBOSITY > 1)
+		std::cerr
+			<< clocks_size << '\t' << "for SM cycle clock values\n"
+			<< accesses_size << '\t' << "for memory access indexes\n"
+			<< processor_ids_size << '\t' << "for SM IDs\n";
+#endif
+		assert(clocks_size > 0);
+		assert(accesses_size > 0);
+		assert(processor_ids_size > 0);
 		if (total_memory_required > MAX_BYTES_WARNING_LIMIT) {
 			std::cerr
 				<< "Warning: PatternRecorder is trying to allocate " << total_memory_required << " bytes of device memory for storing memory accesses.\n"
@@ -186,8 +199,7 @@ public:
 		// Offset write buffer of accesses and SM cycle clocks to correct position for measurements from this thread block
 		buffer_idx = thread_idx_in_block + block_idx_in_grid * accesses_per_block;
 #if (PR_VERBOSITY > 1)
-		fprintf(stderr,
-			"%p entered kernel, bufidx %d, start_clock %llu on sm %u, t %d b %d\n",
+		printf("%p entered kernel, bufidx %d, start_clock %llu on sm %u, t %d b %d\n",
 			this,
 			buffer_idx,
 			start_clock,
@@ -209,8 +221,7 @@ public:
 		int threads_per_block = blockDim.x * blockDim.y * blockDim.z;
 		buffer_idx += threads_per_block;
 #if (PR_VERBOSITY > 1)
-		fprintf(stderr,
-			"%p accessed %d bufferidx offset %d->%d, SM cycle %llu, t %d b %d\n",
+		printf("%p accessed %d bufferidx offset %d->%d, SM cycle %llu, t %d b %d\n",
 			this,
 			idx,
 			buffer_idx - threads_per_block,
@@ -272,6 +283,18 @@ public:
 		out << "]";
 		out << "}\n";
 	}
+
+	__host__
+	inline void dump_access_statistics(std::ostream& out, char sep='\t') const {
+		const unsigned num_blocks = dimGrid.x * dimGrid.y * dimGrid.z;
+		const unsigned max_SM_id = *std::max_element(processor_ids, processor_ids + num_blocks);
+		std::vector<unsigned> counts(max_SM_id + 1, 0u);
+		for (int b = 0; b < num_blocks; ++b) {
+			++counts[processor_ids[b]];
+		}
+		const unsigned SMs_used = std::count_if(counts.begin(), counts.end(), [](unsigned c) { return c > 0; });
+		out << SMs_used << sep << "different streaming multiprocessors used\n";
+	}
 };
 
 
@@ -302,13 +325,14 @@ public:
 #endif
 		const unsigned num_blocks = dimGrid.x * dimGrid.y * dimGrid.z;
 		const size_t access_counters_size = num_blocks * sizeof(unsigned long long);
+#if (PR_VERBOSITY > 0)
+		std::cerr << "Trying to allocate " << access_counters_size << " bytes on the device\n";
+#endif
+		assert(access_counters_size > 0);
 		CHECK_CUDA_ERROR(cudaMallocManaged(&access_counters, access_counters_size));
 		CHECK_CUDA_ERROR(cudaDeviceSynchronize());
 		CHECK_CUDA_ERROR(cudaMemset(access_counters, 0, access_counters_size));
 		CHECK_CUDA_ERROR(cudaDeviceSynchronize());
-#if (PR_VERBOSITY > 0)
-		std::cerr << "AccessCounter " << this << " allocated " << access_counters_size << " bytes on the device\n";
-#endif
 	}
 
 	__host__
@@ -346,13 +370,29 @@ public:
 			blockIdx.y * gridDim.x +
 			blockIdx.z * gridDim.x * gridDim.y
 		);
+#if (PR_VERBOSITY > 1)
+		int thread_idx_in_block = (
+			threadIdx.x +
+			threadIdx.y * blockDim.x +
+			threadIdx.z * blockDim.x * blockDim.y
+		);
+		printf("%p entered kernel, t %d b %d\n",
+			this,
+			thread_idx_in_block,
+			block_idx_in_grid
+		);
+#endif
 	}
 
 	__device__ __forceinline__
 	KernelDataType operator[](int idx) {
 #if (PR_VERBOSITY > 1)
-		fprintf(stderr,
-			"%p accessed %d, t %d b %d\n",
+		int thread_idx_in_block = (
+			threadIdx.x +
+			threadIdx.y * blockDim.x +
+			threadIdx.z * blockDim.x * blockDim.y
+		);
+		printf("%p accessed %d, t %d b %d\n",
 			this,
 			idx,
 			thread_idx_in_block,
