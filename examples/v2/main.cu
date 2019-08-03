@@ -24,8 +24,7 @@ inline void check(cudaError_t err, const char* context) {
 #define CHECK(x) check(x, #x)
 
 
-const char* patterns_out_path = "access-patterns.json";
-const char* results_out_path = "/dev/null";
+const char* patterns_out_path = "access-patterns-v2.json";
 
 
 template <class KernelData>
@@ -110,7 +109,7 @@ void step(float* r, const float* d, int n) {
 	CHECK(cudaMalloc((void**)&rGPU, n * n * sizeof(float)));
 	CHECK(cudaMemcpy(rGPU, d, n * n * sizeof(float), cudaMemcpyHostToDevice));
 
-	// Run kernel
+	// Run normalization kernel
 	{
 		dim3 dimBlock(64, 1);
 		dim3 dimGrid(1, nn);
@@ -118,19 +117,22 @@ void step(float* r, const float* d, int n) {
 		CHECK(cudaGetLastError());
 	}
 
+	// Run computation kernel twice to compute access patterns
 	{
 		dim3 dimBlock(8, 8);
 		dim3 dimGrid(nn / 64, nn / 64);
 		pr::AccessCounter<float> counter(dGPU, dimGrid);
 		mykernel<pr::AccessCounter<float> ><<<dimGrid, dimBlock>>>(rGPU, counter, n, nn);
 		CHECK(cudaDeviceSynchronize());
+		counter.dump_access_statistics(std::cout);
 		pr::PatternRecorder<float> recorder(dGPU, dimGrid, counter.get_max_access_count());
 		mykernel<pr::PatternRecorder<float> ><<<dimGrid, dimBlock>>>(rGPU, recorder, n, nn);
 		CHECK(cudaDeviceSynchronize());
 		std::ofstream outf(patterns_out_path);
-		recorder.dump_access_statistics(std::cout);
 		recorder.dump_json_results(outf, nn, nn);
 	}
+
+	CHECK(cudaGetLastError());
 
 	// Copy data back to CPU & release memory
 	CHECK(cudaMemcpy(r, rGPU, n * n * sizeof(float), cudaMemcpyDeviceToHost));
@@ -157,7 +159,7 @@ int main() {
 	std::vector<float> result(n * n);
 	// Compute stuff
 	step(result.data(), matrix.data(), n);
-	// Write output
-	std::ofstream outf(results_out_path);
+	// Write dummy output
+	std::ofstream outf("/dev/null");
 	std::copy(result.begin(), result.end(), std::ostream_iterator<float>(outf, " "));
 }
