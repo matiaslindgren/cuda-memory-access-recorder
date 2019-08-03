@@ -234,6 +234,17 @@ public:
 		return data[idx];
 	}
 
+	__host__
+	inline unsigned get_num_different_SMs_used() const {
+		const unsigned num_blocks = dimGrid.x * dimGrid.y * dimGrid.z;
+		const unsigned max_SM_id = *std::max_element(processor_ids, processor_ids + num_blocks);
+		std::vector<unsigned> counts(max_SM_id + 1, 0u);
+		for (int b = 0; b < num_blocks; ++b) {
+			++counts[processor_ids[b]];
+		}
+		return std::count_if(counts.begin(), counts.end(), [](unsigned c) { return c > 0; });
+	}
+
 	// No need for a json-library since we only need to write json
 	__host__
 	inline void dump_json_results(std::ostream& out, unsigned num_rows, unsigned num_cols) const {
@@ -281,19 +292,8 @@ public:
 			out << ',' << processor_ids[b];
 		}
 		out << "]";
+		out << ",\"num_SMs_used\":" << get_num_different_SMs_used();
 		out << "}\n";
-	}
-
-	__host__
-	inline void dump_access_statistics(std::ostream& out, char sep='\t') const {
-		const unsigned num_blocks = dimGrid.x * dimGrid.y * dimGrid.z;
-		const unsigned max_SM_id = *std::max_element(processor_ids, processor_ids + num_blocks);
-		std::vector<unsigned> counts(max_SM_id + 1, 0u);
-		for (int b = 0; b < num_blocks; ++b) {
-			++counts[processor_ids[b]];
-		}
-		const unsigned SMs_used = std::count_if(counts.begin(), counts.end(), [](unsigned c) { return c > 0; });
-		out << SMs_used << sep << "different streaming multiprocessors used\n";
 	}
 };
 

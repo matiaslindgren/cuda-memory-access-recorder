@@ -20,10 +20,20 @@
       <b><pre>Access pattern file</pre></b>
       <input type="file" id="access-patterns-file" accept=".json">
       <b><pre>Animation control</pre></b>
-      <pre>cycle <span id="cycle-counter">0</span></pre>
       <input id="restart-button" type="button" value="Restart"/>
       <input id="pause-button" type="button" value="Pause"/>
       <select id="memory-slot-size-select"></select>
+      <b><pre>Device state</pre></b>
+      <table>
+          <tbody>
+              <tr>
+                  <td>number of processors used</td><td id="num-SMs">n/a</td>
+              </tr>
+              <tr>
+                  <td>current cycle</td><td id="cycle-counter">n/a</td>
+              </tr>
+          </tbody>
+      </table>
     </div>
     <div id="memoryCanvasContainer" class="column canvas-container">
       <h3><pre>Global device memory (DRAM)</pre></h3>

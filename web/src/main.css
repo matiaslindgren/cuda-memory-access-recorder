@@ -9,6 +9,10 @@ canvas {
     height: 100%;
 }
 
+td {
+    padding-right: 10px;
+}
+
 .menubar {
     padding-left: 25px;
 }

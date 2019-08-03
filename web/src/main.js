@@ -11,6 +11,7 @@ var currentCycle = 0;
 var memoryRowCount = 64;
 var memoryColumnCount = 64;
 var cycleCounterSpan;
+var numberOfSMs;
 var stepsPerCycle = 100;
 
 
@@ -55,7 +56,7 @@ function groupAccessPatterns(accessPatterns, stepsPerCycle) {
 // Initialize access patterns from submitted JSON file
 function JSONFileHandler(event) {
 	let animationDefinition = JSON.parse(event.target.result);
-	console.log(animationDefinition);
+	numberOfSMs.innerHTML = animationDefinition.num_SMs_used || "n/a";
 	memoryColumnCount = animationDefinition.cols;
 	memoryRowCount = animationDefinition.rows;
 	if (animationDefinition.accesses.length !== animationDefinition.clocks.length) {
@@ -85,6 +86,7 @@ function initUI() {
 	const memorySlotSizeSelect = document.getElementById("memory-slot-size-select");
 	const accessPatternFileInput = document.getElementById("access-patterns-file");
 	cycleCounterSpan = document.getElementById("cycle-counter");
+	numberOfSMs = document.getElementById("num-SMs");
 	pauseButton.addEventListener("click", _ => {
 		pause();
 		pauseButton.value = drawing ? "Pause" : "Continue";
