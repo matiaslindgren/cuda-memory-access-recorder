@@ -10,7 +10,7 @@
 
 #include <cuda_runtime.h>
 
-#include "pattern_recorder.h"
+#include "pattern_recorder.cuh"
 
 // When counting number of accesses
 /* using Wrapper = pr::AccessCounter<float>; */
