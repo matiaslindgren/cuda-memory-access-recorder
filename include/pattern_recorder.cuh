@@ -1,16 +1,25 @@
+/*
+ * Utilities for analyzing memory access patterns on data passed into a CUDA kernel.
+ *
+ * AccessCounter uses atomicAdd to count all memory accesses by every thread block.
+ * PatternRecorder writes all accesses and SM cycle counter values to global device memory.
+ */
 #ifndef PATTERN_RECORDER_H
 #define PATTERN_RECORDER_H
 #include <vector>
 #include <algorithm>
 #include <string>
 #include <iostream>
+#include <cassert>
 #include <cuda_runtime.h>
-#include <assert.h>
 
-// 0 quiet (except when explicitly calling ostream dump methods)
+// 0 quiet (except when explicitly calling ostream write methods)
 // 1 informative
 // 2 insanity
 #define PR_VERBOSITY 0
+
+// When the amount of memory required to store all access patterns exceeds this size, print a warning
+#define MAX_BYTES_WARNING_LIMIT 200000000 /* 200M */
 
 namespace pr {
 
@@ -26,7 +35,8 @@ inline void check(cudaError_t err, const char* file, int lineno, const char* con
 #define CHECK_CUDA_ERROR(x) pr::check((x), __FILE__, __LINE__, #x)
 
 
-// Wrapper around an array of type KernelDataType for recording device memory accesses on the array.
+// Wrapper around a KernelDataType pointer that records every memory access and SM cycle value during the access.
+// Results are always written linearly into global device memory that should minimize interference with the memory access pattern being recorded.
 template <typename KernelDataType>
 class PatternRecorder {
 	// Pointers to global device memory, shared among all copies of a PatternRecorder object.
@@ -43,18 +53,20 @@ class PatternRecorder {
 	unsigned* clocks;
 	// For every thread block, ID of the SM that the block got scheduled on.
 	// (pointer is owned and managed)
-	uint32_t* processor_ids;
+	unsigned* processor_ids;
 
 	// Variables for limiting the amount of device memory to be used.
 	//
 	// Maximum amount of accesses one thread block will perform during kernel execution.
 	// This number should not be exceeded.
 	const unsigned long long accesses_per_block;
-	// Amount of thread blocks in the grid.
-	const unsigned num_blocks;
+	// The regular, second parameter given to a CUDA kernel invocation.
+	// Used to compute the maximum amount of blocks
+	const dim3 dimGrid;
 	// True iff this PatternRecorder object manages the device memory.
 	// E.g. the copy constructor will set this to false for every copy.
 	const bool is_master;
+
 
 	// Variables local to each thread block during kernel execution.
 	// These variables are assumed to be undefined and unused outside kernel calls.
@@ -72,13 +84,13 @@ class PatternRecorder {
 
 public:
 	__host__
-	PatternRecorder(const KernelDataType* device_data, unsigned nb, unsigned long long ab) :
+	PatternRecorder(const KernelDataType* device_data, dim3 dimGrid, unsigned long long ab) :
 		data(device_data),
 		accesses(nullptr),
 		clocks(nullptr),
 		processor_ids(nullptr),
 		accesses_per_block(ab),
-		num_blocks(nb),
+		dimGrid(dimGrid),
 		block_idx_in_grid(0),
 		thread_idx_in_block(0),
 		is_master(true)
@@ -86,12 +98,19 @@ public:
 #if (PR_VERBOSITY > 0)
 		std::cerr << "Constructing PatternRecorder " << this << " for device data " << device_data << "\n";
 #endif
+		const unsigned num_blocks = dimGrid.x * dimGrid.y * dimGrid.z;
 		const size_t clocks_size = num_blocks * accesses_per_block * sizeof(unsigned);
 		const size_t accesses_size = num_blocks * accesses_per_block * sizeof(int);
-		const size_t processor_ids_size = num_blocks * sizeof(uint32_t);
+		const size_t processor_ids_size = num_blocks * sizeof(unsigned);
+		const size_t total_memory_required = clocks_size + accesses_size + processor_ids_size;
 #if (PR_VERBOSITY > 0)
-		std::cerr << "Trying to allocate " << (clocks_size + accesses_size + processor_ids_size) << " bytes on the device\n";
+		std::cerr << "Trying to allocate " << total_memory_required << " bytes on the device\n";
 #endif
+		if (total_memory_required > MAX_BYTES_WARNING_LIMIT) {
+			std::cerr
+				<< "Warning: PatternRecorder is trying to allocate " << total_memory_required << " bytes of device memory for storing memory accesses.\n"
+				<< "Reduce the sample size of the data that is being analyzed or increase MAX_BYTES_WARNING_LIMIT to silence this warning\n";
+		}
 		CHECK_CUDA_ERROR(cudaMallocManaged(&clocks, clocks_size));
 		CHECK_CUDA_ERROR(cudaMallocManaged(&accesses, accesses_size));
 		CHECK_CUDA_ERROR(cudaMallocManaged(&processor_ids, processor_ids_size));
@@ -111,16 +130,16 @@ public:
 	// Copies of a PatternRecorder should not allocate new device memory but write to the same device memory area as source PatternRecorder object
 	__host__
 	PatternRecorder(const PatternRecorder& other) :
+		data(other.data),
+		accesses(other.accesses),
+		clocks(other.clocks),
+		processor_ids(other.processor_ids),
 		accesses_per_block(other.accesses_per_block),
-		num_blocks(other.num_blocks),
+		dimGrid(other.dimGrid),
+		block_idx_in_grid(0),
+		thread_idx_in_block(0),
 		is_master(false) // Makes destructor a no-op
 	{
-		data = other.data;
-		accesses = other.accesses;
-		clocks = other.clocks;
-		processor_ids = other.processor_ids;
-		block_idx_in_grid = 0;
-		thread_idx_in_block = 0;
 	}
 
 	__host__
@@ -157,12 +176,11 @@ public:
 			blockIdx.y * gridDim.x +
 			blockIdx.z * gridDim.x * gridDim.y
 		);
-		assert(block_idx_in_grid < num_blocks);
 		// Extract id of the SM this thread block got scheduled on
 		uint32_t SM_id;
 		// %smid is a predefined PTX identifier
 		asm volatile("mov.u32 %0, %%smid;" : "=r"(SM_id));
-		processor_ids[block_idx_in_grid] = SM_id;
+		processor_ids[block_idx_in_grid] = static_cast<unsigned>(SM_id);
 		// Use the current cycle counter value of this SM as 'time zero'
 		start_clock = clock64();
 		// Offset write buffer of accesses and SM cycle clocks to correct position for measurements from this thread block
@@ -205,37 +223,54 @@ public:
 		return data[idx];
 	}
 
+	// No need for a json-library since we only need to write json
 	__host__
-	inline void dump_thread_block_SM_schedules(std::ostream& out=std::cout, char sep='\t', bool no_header=false) const {
-		CHECK_CUDA_ERROR(cudaDeviceSynchronize());
-		if (!no_header) {
-			out << "Thread block" << sep << "SM id\n";
-		}
-		//TODO block index mapping to actual blockIdx
-		// processor_ids was allocated as Unified Memory so there is no need to explicitly memcpy from device to host
-		for (int b = 0; b < num_blocks; ++b) {
-			out << b << sep << processor_ids[b] << "\n";
-		}
-	}
-
-	__host__
-	inline void dump_access_clocks(std::ostream& out=std::cout, char sep='\t', bool no_header=false) const {
-		CHECK_CUDA_ERROR(cudaDeviceSynchronize());
-		if (!no_header) {
-			out << "Memory index" << sep << "Accessed at cycle\n";
-		}
+	inline void dump_json_results(std::ostream& out, unsigned num_rows, unsigned num_cols) const {
+		out << "{";
+		out << "\"rows\":" << num_rows << ",\"cols\":" << num_cols;
+		const unsigned num_blocks = dimGrid.x * dimGrid.y * dimGrid.z;
 		const int num_accesses = num_blocks * accesses_per_block;
+		out << ",\"accesses\":[";
+		bool no_separator = true;
 		for (int i = 0; i < num_accesses; ++i)
 		{
 			unsigned c = clocks[i];
 			int a = accesses[i];
 			// index a was never accessed <=> timestamp c is empty
 			assert((a != -1 || c == ~0u) && (a == -1 || c != ~0u));
-			if (c != ~0u || a != -1) {
+			if (a != -1) {
 				// Index a was accessed at clock cycle c
-				out << a << sep << c << "\n";
+				if (no_separator) {
+					no_separator = false;
+				} else {
+					out << ',';
+				}
+				out << a;
 			}
 		}
+		out << "]";
+		out << ",\"clocks\":[";
+		no_separator = true;
+		for (int i = 0; i < num_accesses; ++i)
+		{
+			unsigned c = clocks[i];
+			if (c != ~0u) {
+				if (no_separator) {
+					no_separator = false;
+				} else {
+					out << ',';
+				}
+				out << c;
+			}
+		}
+		out << "]";
+		out << ",\"SM_ids\":[";
+		out << processor_ids[0];
+		for (int b = 1; b < num_blocks; ++b) {
+			out << ',' << processor_ids[b];
+		}
+		out << "]";
+		out << "}\n";
 	}
 };
 
@@ -248,23 +283,24 @@ class AccessCounter {
 	// Amount of memory accesses performed by threads in a thread block.
 	unsigned long long* access_counters;
 
-	const unsigned num_blocks;
+	const dim3 dimGrid;
 	const bool is_master;
 
 	int block_idx_in_grid;
 
 public:
 	__host__
-	AccessCounter(const KernelDataType* device_data, unsigned nb) :
+	AccessCounter(const KernelDataType* device_data, dim3 dimGrid) :
 		data(device_data),
 		access_counters(nullptr),
-		num_blocks(nb),
+		dimGrid(dimGrid),
 		block_idx_in_grid(0),
 		is_master(true)
 	{
 #if (PR_VERBOSITY > 0)
 		std::cerr << "Constructing AccessCounter " << this << " for device data " << device_data << "\n";
 #endif
+		const unsigned num_blocks = dimGrid.x * dimGrid.y * dimGrid.z;
 		const size_t access_counters_size = num_blocks * sizeof(unsigned long long);
 		CHECK_CUDA_ERROR(cudaMallocManaged(&access_counters, access_counters_size));
 		CHECK_CUDA_ERROR(cudaDeviceSynchronize());
@@ -277,12 +313,12 @@ public:
 
 	__host__
 	AccessCounter(const AccessCounter& other) :
-		num_blocks(other.num_blocks),
+		data(other.data),
+		access_counters(other.access_counters),
+		dimGrid(other.dimGrid),
+		block_idx_in_grid(0),
 		is_master(false)
 	{
-		data = other.data;
-		access_counters = other.access_counters;
-		block_idx_in_grid = 0;
 	}
 
 	__host__
@@ -329,8 +365,14 @@ public:
 	}
 
 	__host__
-	inline void dump_num_accesses(std::ostream& out=std::cout, bool max_only=false) const {
-		CHECK_CUDA_ERROR(cudaDeviceSynchronize());
+	inline unsigned long long get_max_access_count() const {
+		const unsigned num_blocks = dimGrid.x * dimGrid.y * dimGrid.z;
+		return *std::max_element(access_counters, access_counters + num_blocks);
+	}
+
+	__host__
+	inline void dump_access_statistics(std::ostream& out, char sep='\t') const {
+		const unsigned num_blocks = dimGrid.x * dimGrid.y * dimGrid.z;
 		// Count all blocks that did no memory accesses
 		auto num_zero_elements = std::count(access_counters, access_counters + num_blocks, 0);
 		auto num_non_zero_elements = num_blocks - num_zero_elements;
@@ -342,15 +384,11 @@ public:
 			non_zeros.begin(),
 			[](unsigned long long c) { return c > 0; }
 		);
-		const auto max_access_count = *std::max_element(
+		const auto min_access_count = *std::min_element(
 			non_zeros.begin(),
 			non_zeros.end()
 		);
-		if (max_only) {
-			out << max_access_count << "\n";
-			return;
-		}
-		const auto min_access_count = *std::min_element(
+		const auto max_access_count = *std::max_element(
 			non_zeros.begin(),
 			non_zeros.end()
 		);
@@ -364,25 +402,29 @@ public:
 		size_t req_access_pattern_size = (
 			num_blocks * max_access_count * sizeof(unsigned) +
 			num_blocks * max_access_count * sizeof(int) +
-			num_blocks * sizeof(uint32_t)
+			num_blocks * sizeof(unsigned)
 		);
 		// Required PatternRecorder size might be long, add some commas
 		std::string req_size_str = std::to_string(req_access_pattern_size);
 		for (int pos = req_size_str.size() - 3; pos > 0; pos -= 3) {
 			req_size_str.insert(pos, 1, ',');
 		}
-		out << "Recorded all memory accesses for all thread blocks:\n"
-			<< num_blocks << '\t' << "the grid was specified to contain this many thread blocks\n"
-			<< num_zero_elements << '\t' << "blocks did not perform any memory accesses\n"
-			<< num_non_zero_elements << '\t' << "blocks performed at least 1 memory access\n"
-			<< "Statistics on number of accesses per thread block:\n"
-			<< min_access_count << '\t' << "minimum amount of accesses\n"
-			<< median << '\t' << "median amount of accesses\n"
-			<< max_access_count << '\t' << "maximum amount of accesses\n"
-			<< "The amount of device memory required by an PatternRecorder instance would be:\n"
-			<< req_size_str << '\t' << "bytes\n";
+		out << "AccessCounter statistics:\n"
+			<< num_non_zero_elements << sep << "thread blocks did at least one memory access\n"
+			<< num_zero_elements << sep << "thread blocks did no memory accesses\n"
+			<< "Statistics for thread blocks that did at least one memory access:\n"
+			<< min_access_count << sep << "least amount of accesses\n"
+			<< median << sep << "median amount of accesses\n"
+			<< max_access_count << sep << "most amount of accesses\n"
+			<< "The amount of device memory required by an PatternRecorder instance to record all accesses would be:\n"
+			<< req_size_str << sep << "bytes\n";
 	}
 };
 
 } // namespace pr
+
+#undef PR_VERBOSITY
+#undef CHECK_CUDA_ERROR
+#undef MAX_BYTES_WARNING_LIMIT
+
 #endif // PATTERN_RECORDER_H

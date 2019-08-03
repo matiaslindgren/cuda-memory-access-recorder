@@ -6,7 +6,7 @@ var device;
 var drawing = false;
 var prevRenderFrameID;
 var memorySlotSize = 20;
-var accessPatterns = new Map;
+var accessPatterns;
 var currentCycle = 0;
 var memoryRowCount = 64;
 var memoryColumnCount = 64;
@@ -52,6 +52,32 @@ function groupAccessPatterns(accessPatterns, stepsPerCycle) {
 	return accessPatternGroups;
 }
 
+// Initialize access patterns from submitted JSON file
+function JSONFileHandler(event) {
+	let animationDefinition = JSON.parse(event.target.result);
+	console.log(animationDefinition);
+	memoryColumnCount = animationDefinition.cols;
+	memoryRowCount = animationDefinition.rows;
+	if (animationDefinition.accesses.length !== animationDefinition.clocks.length) {
+		console.error("accesses and clocks arrays should be of equal length since their elements are defined as pairs.");
+	}
+	accessPatterns = new Map;
+	for (let i = 0; i < animationDefinition.accesses.length; ++i) {
+		const cycle = animationDefinition.clocks[i];
+		const index = animationDefinition.accesses[i];
+		if (typeof accessPatterns.get(cycle) === "undefined") {
+			accessPatterns.set(cycle, new Set([index]));
+		} else {
+			accessPatterns.get(cycle).add(index);
+		}
+	}
+	console.log("Parsed", accessPatterns.size, "memory access events");
+	if (stepsPerCycle > 1) {
+		accessPatterns = groupAccessPatterns(accessPatterns, stepsPerCycle);
+	}
+	restart();
+};
+
 // Define menubar buttons for interacting with the animation
 function initUI() {
 	const pauseButton = document.getElementById("pause-button");
@@ -74,31 +100,11 @@ function initUI() {
 		restart();
 	});
 	accessPatternFileInput.addEventListener("change", event => {
-		//FIXME validate file
 		const file = event.target.files[0];
 		console.log("Parsing", file.name, "of size", file.size);
-		const filePromise = new Response(file.slice(0, file.size - 1)).text();
-		filePromise.then(content => {
-			let invalidIndexCount = 0;
-			const lines = content.split('\n');
-			for (let line of lines.slice(1)) {
-				let [index, cycle] = line.split('\t').map(x => parseInt(x));
-				if (typeof accessPatterns.get(cycle) === "undefined") {
-					accessPatterns.set(cycle, new Set([index]));
-				} else {
-					accessPatterns.get(cycle).add(index);
-				}
-				invalidIndexCount += index > memoryRowCount * memoryColumnCount;
-			}
-			console.log("Parsed", accessPatterns.size, "memory access events");
-			if (invalidIndexCount > 0) {
-				console.warn(invalidIndexCount, "indexes are out of range, the current device memory canvas does not have enough slots to show them");
-			}
-			if (stepsPerCycle > 1) {
-				accessPatterns = groupAccessPatterns(accessPatterns, stepsPerCycle);
-			}
-			restart();
-		});
+		const reader = new FileReader();
+		reader.onload = JSONFileHandler;
+		reader.readAsText(file);
 	});
 }
 

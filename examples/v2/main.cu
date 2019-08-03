@@ -12,17 +12,25 @@
 
 #include "pattern_recorder.cuh"
 
-// When counting number of accesses
-/* using Wrapper = pr::AccessCounter<float>; */
-// When recording access patterns and timings
-using Wrapper = pr::PatternRecorder<float>;
 
-const std::string patterns_out_path("access-patterns.txt");
-const std::string results_out_path("/dev/null");
+inline void check(cudaError_t err, const char* context) {
+    if (err != cudaSuccess) {
+        std::cerr << "CUDA error: " << context << ": "
+            << cudaGetErrorString(err) << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+}
+
+#define CHECK(x) check(x, #x)
 
 
+const char* patterns_out_path = "access-patterns.json";
+const char* results_out_path = "/dev/null";
+
+
+template <class KernelData>
 __global__
-void mykernel(float* r, Wrapper d, int n, int nn) {
+void mykernel(float* r, KernelData d, int n, int nn) {
 	d.enter_kernel();
 	int ia = threadIdx.x;
 	int ja = threadIdx.y;
@@ -82,6 +90,7 @@ __global__ void myppkernel(const float* r, float* d, int n, int nn) {
 	}
 }
 
+
 inline int static divup(int a, int b) {
 	return (a + b - 1) / b;
 }
@@ -90,50 +99,42 @@ inline int static roundup(int a, int b) {
 	return divup(a, b) * b;
 }
 
+
 void step(float* r, const float* d, int n) {
 	int nn = roundup(n, 64);
 
 	// Allocate memory & copy data to GPU
 	float* dGPU = NULL;
-	CHECK_CUDA_ERROR(cudaMalloc((void**)&dGPU, 2 * nn * nn * sizeof(float)));
+	CHECK(cudaMalloc((void**)&dGPU, 2 * nn * nn * sizeof(float)));
 	float* rGPU = NULL;
-	CHECK_CUDA_ERROR(cudaMalloc((void**)&rGPU, n * n * sizeof(float)));
-	CHECK_CUDA_ERROR(cudaMemcpy(rGPU, d, n * n * sizeof(float), cudaMemcpyHostToDevice));
+	CHECK(cudaMalloc((void**)&rGPU, n * n * sizeof(float)));
+	CHECK(cudaMemcpy(rGPU, d, n * n * sizeof(float), cudaMemcpyHostToDevice));
 
 	// Run kernel
 	{
 		dim3 dimBlock(64, 1);
 		dim3 dimGrid(1, nn);
 		myppkernel<<<dimGrid, dimBlock>>>(rGPU, dGPU, n, nn);
-		CHECK_CUDA_ERROR(cudaGetLastError());
+		CHECK(cudaGetLastError());
 	}
 
-	dim3 dimBlock(8, 8);
-	dim3 dimGrid(nn / 64, nn / 64);
-#if 0
 	{
-		const int num_blocks = dimGrid.x * dimGrid.y * dimGrid.z;
-		Wrapper counter(dGPU, num_blocks);
-		mykernel<<<dimGrid, dimBlock>>>(rGPU, counter, n, nn);
-		counter.dump_num_accesses();
-	}
-#endif
-
-#if 1
-	{
-		const int max_access_count = 65536;
-		const int num_blocks = dimGrid.x * dimGrid.y * dimGrid.z;
-		Wrapper recorder(dGPU, num_blocks, max_access_count);
-		mykernel<<<dimGrid, dimBlock>>>(rGPU, recorder, n, nn);
+		dim3 dimBlock(8, 8);
+		dim3 dimGrid(nn / 64, nn / 64);
+		pr::AccessCounter<float> counter(dGPU, dimGrid);
+		mykernel<pr::AccessCounter<float> ><<<dimGrid, dimBlock>>>(rGPU, counter, n, nn);
+		CHECK(cudaDeviceSynchronize());
+		pr::PatternRecorder<float> recorder(dGPU, dimGrid, counter.get_max_access_count());
+		mykernel<pr::PatternRecorder<float> ><<<dimGrid, dimBlock>>>(rGPU, recorder, n, nn);
+		CHECK(cudaDeviceSynchronize());
 		std::ofstream outf(patterns_out_path);
-		recorder.dump_access_clocks(outf);
+		recorder.dump_json_results(outf, nn, nn);
 	}
-#endif
 
 	// Copy data back to CPU & release memory
-	CHECK_CUDA_ERROR(cudaMemcpy(r, rGPU, n * n * sizeof(float), cudaMemcpyDeviceToHost));
-	CHECK_CUDA_ERROR(cudaFree(dGPU));
-	CHECK_CUDA_ERROR(cudaFree(rGPU));
+	CHECK(cudaMemcpy(r, rGPU, n * n * sizeof(float), cudaMemcpyDeviceToHost));
+	CHECK(cudaFree(dGPU));
+	CHECK(cudaFree(rGPU));
 }
 
 
