@@ -18,7 +18,7 @@ class Drawable {
 		const width = this.width;
 		const height = this.height;
 		const ctx = this.canvasContext;
-		assert([x, y, width, height, ctx].every(val => typeof val !== "undefined"), "Drawable instances must always have defined x, y, width, height, and canvasContext.", {name: "Drawable", obj: this});
+		/* assert([x, y, width, height, ctx].every(val => typeof val !== "undefined"), "Drawable instances must always have defined x, y, width, height, and canvasContext.", {name: "Drawable", obj: this}); */
 		if (this.fillRGBA !== null) {
 			ctx.fillStyle = "rgba(" + this.fillRGBA.join(',') + ')';
 			ctx.fillRect(x, y, width, height);
@@ -44,7 +44,7 @@ class DeviceMemory extends Drawable {
 		super("device-memory", x, y, width, height, canvas);
 		this.accessPatterns = accessPatterns;
 		this.maxCycle = Math.max.apply(null, Array.from(this.accessPatterns.keys()));
-		assert(typeof this.maxCycle !== "undefined", "Possibly invalid memory access pattern Map provided to DeviceMemory");
+		/* assert(typeof this.maxCycle !== "undefined", "Possibly invalid memory access pattern Map provided to DeviceMemory"); */
 		const slotFillRGBA = CONFIG.memory.slotFillRGBA.slice();
 		this.slots = Array.from(
 			new Array(columns * rows),
@@ -83,9 +83,9 @@ class DeviceMemory extends Drawable {
 
 	// Simulated memory access to DRAM index `memoryIndex` by an SM with id `SM_ID`
 	touch(SM_ID, memoryIndex) {
-		assert(typeof memoryIndex !== "undefined", "memoryIndex must be defined when touching memory slot");
-		assert(typeof SM_ID !== "undefined", "SM_ID must be defined when touching memory slot");
-		assert(CONFIG.SM.count.min <= SM_ID <= CONFIG.SM.count.max, "attempting to touch a DRAM index " + memoryIndex + " with multiprocessor ID " + SM_ID + " which is out of range of minimum and maximum amount of SMs");
+		/* assert(typeof memoryIndex !== "undefined", "memoryIndex must be defined when touching memory slot"); */
+		/* assert(typeof SM_ID !== "undefined", "SM_ID must be defined when touching memory slot"); */
+		/* assert(CONFIG.SM.count.min <= SM_ID <= CONFIG.SM.count.max, "attempting to touch a DRAM index " + memoryIndex + " with multiprocessor ID " + SM_ID + " which is out of range of minimum and maximum amount of SMs"); */
 		const slot = this.slots[memoryIndex];
 		++slot.threadAccessCounter[SM_ID - 1];
 		let overlay = slot.overlays[SM_ID - 1];
@@ -132,7 +132,7 @@ class DeviceMemory extends Drawable {
 			for (let SM_ID = 1; SM_ID < slot.overlays.length + 1; ++SM_ID) {
 				let overlay = slot.overlays[SM_ID - 1];
 				const drawable = overlay.drawable;
-				assert(typeof drawable !== "undefined", "All memory slots must have drawables for every SM overlay color");
+				/* assert(typeof drawable !== "undefined", "All memory slots must have drawables for every SM overlay color"); */
 				if (slot.threadAccessCounter[SM_ID - 1] > 0) {
 					// Some thread of a warp scheduled in this SM is still accessing memory slot i
 					// Draw small slice of original so that all slices fit in the slot
