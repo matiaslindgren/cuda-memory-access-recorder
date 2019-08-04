@@ -32,3 +32,14 @@ Go to http://0.0.0.0:8000 and submit the generated `examples/v0/access-patterns-
 You should now see the access pattern from the first gif.
 
 To use the v1 kernel, open [`examples/v0/main.cu`](examples/v0/main.cu) and define the `kernel_v1` macro instead of `kernel_v0`.
+
+## It doesn't work
+
+Some things to try:
+
+* Make sure you are running wrapper `AccessCounter` first, then `PatternRecorder`.
+* The wrapper objects support only array indexing, pointer arithmetic etc. is not available.
+* Make sure the wrapper object calls `enter_kernel` **once** somewhere at the beginning of a kernel before the first memory access.
+* Make sure you call `cudaDeviceSynchronize` after the kernel call so that the unified memory pointers are accessible at the host.
+* Define the value of macro `PR_VERBOSITY` as 1 before including `pattern_recorder.cuh`. This will trigger some asserts.
+* If you are getting a warning of possibly using too much device memory, try reducing the number of required memory accesses by using a smaller data sample.
