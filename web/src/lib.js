@@ -1,32 +1,24 @@
 class Drawable {
 	// Simple HTML5 canvas primitive with dimensions, position and color
-	constructor(label, x, y, width, height, canvas, strokeRGBA, fillRGBA) {
+	constructor(label, x, y, width, height, canvas, fillRGBA) {
 		this.label = label;
 		this.x = x;
 		this.y = y;
 		this.width = width;
 		this.height = height;
 		this.canvasContext = canvas.getContext("2d");
-		// Copy RGBA arrays, if given, else set to null
-		this.strokeRGBA = (typeof strokeRGBA === "undefined") ? null : strokeRGBA.slice();
-		this.fillRGBA = (typeof fillRGBA === "undefined") ? null : fillRGBA.slice();
+		this.changeFill((typeof fillRGBA === "undefined") ? [0, 0, 0, 0] : fillRGBA.slice());
+	}
+
+	changeFill(fillRGBA) {
+		this.fillRGBA = fillRGBA.slice();
+		this.fillStyle = "rgba(" + fillRGBA.join(',') + ')';
 	}
 
 	draw() {
-		const x = this.x;
-		const y = this.y;
-		const width = this.width;
-		const height = this.height;
 		const ctx = this.canvasContext;
-		/* assert([x, y, width, height, ctx].every(val => typeof val !== "undefined"), "Drawable instances must always have defined x, y, width, height, and canvasContext.", {name: "Drawable", obj: this}); */
-		if (this.fillRGBA !== null) {
-			ctx.fillStyle = "rgba(" + this.fillRGBA.join(',') + ')';
-			ctx.fillRect(x, y, width, height);
-		}
-		if (this.strokeRGBA !== null) {
-			ctx.strokeStyle = "rgba(" + this.strokeRGBA.join(',') + ')';
-			ctx.strokeRect(x, y, width, height);
-		}
+		ctx.fillStyle = this.fillStyle;
+		ctx.fillRect(this.x, this.y, this.width, this.height);
 	}
 }
 
@@ -53,7 +45,7 @@ class DeviceMemory extends Drawable {
 				const rowIndex = Math.floor(i / columns);
 				let slotY = y + rowIndex * (slotSize + slotPadding);
 				// Drawable memory slot
-				const memorySlot = new MemorySlot(i, 2, "memory-slot", slotX, slotY, slotSize, slotSize, canvas, undefined, slotFillRGBA);
+				const memorySlot = new MemorySlot(i, 2, "memory-slot", slotX, slotY, slotSize, slotSize, canvas, slotFillRGBA);
 				// Color of the memory slot after a memory access
 				const touchedColor = CONFIG.memory.accessedSlotColor.slice();
 				const coolDownPeriod = CONFIG.memory.coolDownPeriod;
@@ -73,7 +65,7 @@ class DeviceMemory extends Drawable {
 	touch(memoryIndex) {
 		const slot = this.slots[memoryIndex];
 		slot.hotness = slot.coolDownPeriod;
-		slot.memory.fillRGBA = slot.touchedColor.slice();
+		slot.memory.changeFill(slot.touchedColor);
 	}
 
 	programTerminated(cycle) {
@@ -97,7 +89,9 @@ class DeviceMemory extends Drawable {
 			if (slot.hotness > 0) {
 				// The memory slot is still cooling down from a recent memory access
 				--slot.hotness;
-				slot.memory.fillRGBA[3] -= slot.coolDownStep;
+				let newFill = slot.memory.fillRGBA.slice();
+				newFill[3] -= slot.coolDownStep;
+				slot.memory.changeFill(newFill);
 			}
 		}
 		super.draw();
@@ -126,6 +120,6 @@ class MemorySlot extends Drawable {
 	}
 
 	clear() {
-		this.fillRGBA = this.defaultColor.slice();
+		this.changeFill(his.defaultColor);
 	}
 }
