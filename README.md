@@ -6,6 +6,8 @@ Depending on the amount of memory accesses, this might require quite a lot of sp
 
 ## Examples
 
+Note, the first two examples are running 4 thread blocks on 4 streaming multiprocessors (SM) but the last two used only a single SM for a single thread block.
+
 Baseline approach with a memory access pattern that uses many short cachelines, which leads to poor memory transaction coalescing ([source](http://ppc.cs.aalto.fi/ch4/v0/)):
 
 ![](web/img/screen-v0.gif)
