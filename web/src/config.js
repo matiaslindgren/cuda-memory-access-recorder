@@ -24,42 +24,36 @@ function printobj(o) {
 	console.log(JSON.stringify(o, null, 2));
 }
 
-//FIXME, maybe not needed anymore
 function get4Palette(key) {
-    let alpha = 0.2;
-    let palette = [];
-    switch(key) {
-        case "rgba-colorful":
-            palette = [
-                [35, 196, 1, alpha],
-                [227, 1, 23, alpha],
-                [235, 190, 2, alpha],
-                [47, 21, 182, alpha],
-            ];
-            break;
-        case "rgba-grayscale":
-            alpha = 0.5;
-            palette = [
-                [100, 100, 100, alpha],
-                [200, 200, 200, alpha],
-                [0, 0, 0, alpha],
-                [50, 50, 50, alpha],
-            ];
-            break;
-        default:
-            failHard();
-            console.error("unknown palette key: " + key);
-    }
-    return palette;
+	let alpha = 0.6;
+	let palette = [];
+	switch(key) {
+		case "rgba-colorful":
+			palette = [
+				[35, 196, 1, alpha],
+				[227, 1, 23, alpha],
+				[235, 190, 2, alpha],
+				[47, 21, 182, alpha],
+			];
+			break;
+		case "rgba-grayscale":
+			alpha = 0.5;
+			palette = [
+				[100, 100, 100, alpha],
+				[200, 200, 200, alpha],
+				[0, 0, 0, alpha],
+				[50, 50, 50, alpha],
+			];
+			break;
+		default:
+			failHard();
+			console.error("unknown palette key: " + key);
+	}
+	return palette;
 }
 
 
 const CONFIG = {
-	animation: {
-		// Array of distinct colors to distinguish independent streaming multiprocessors
-		SMColorPalette: get4Palette("rgba-colorful"),
-		// SMColorPalette: get4Palette("rgba-grayscale"),
-	},
 	memory: {
 		// Empty space between each slot on all sides
 		slotPadding: 1,
@@ -68,6 +62,8 @@ const CONFIG = {
 			max: 36,
 			step: 4,
 		},
+		// Color for a slot immediatel after an access
+		accessedSlotColor: get4Palette("rgba-colorful")[0],
 		slotFillRGBA: [160, 160, 160, 0.2],
 		// Amount of animation steps of the cooldown transition after touching a memory index
 		coolDownPeriod: 20,
