@@ -118,18 +118,22 @@ void step(float* r, const float* d, int n) {
 	}
 
 	// Run computation kernel twice to compute access patterns
+	dim3 dimBlock(8, 8);
+	dim3 dimGrid(nn / 64, nn / 64);
+	unsigned long long max_access_count = 0u;
 	{
-		dim3 dimBlock(8, 8);
-		dim3 dimGrid(nn / 64, nn / 64);
 		pr::AccessCounter<float> counter(dGPU, dimGrid);
 		mykernel<pr::AccessCounter<float> ><<<dimGrid, dimBlock>>>(rGPU, counter, n, nn);
 		CHECK(cudaDeviceSynchronize());
-		counter.dump_access_statistics(std::cout);
-		pr::PatternRecorder<float> recorder(dGPU, dimGrid, counter.get_max_access_count());
+		max_access_count = counter.get_max_access_count();
+	}
+	{
+		pr::PatternRecorder<float> recorder(dGPU, dimGrid, max_access_count);
 		mykernel<pr::PatternRecorder<float> ><<<dimGrid, dimBlock>>>(rGPU, recorder, n, nn);
 		CHECK(cudaDeviceSynchronize());
 		std::ofstream outf(patterns_out_path);
-		recorder.dump_json_results(outf, nn, nn);
+		recorder.dump_json_results(outf, 2 * nn, nn);
+		std::cout << "Wrote " << patterns_out_path << "\n";
 	}
 
 	CHECK(cudaGetLastError());
@@ -153,7 +157,7 @@ float next_float() {
 __host__
 int main() {
 	// Generate data
-	int n = 64;
+	int n = 128;
 	std::vector<float> matrix(n * n);
 	std::generate(matrix.begin(), matrix.end(), next_float);
 	std::vector<float> result(n * n);
