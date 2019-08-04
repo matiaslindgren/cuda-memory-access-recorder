@@ -6,15 +6,22 @@ Depending on the amount of memory accesses, this might require quite a lot of sp
 
 ## Examples
 
-Poorly coalesced memory transactions ([kernel source](http://ppc.cs.aalto.fi/ch4/v0/)).
-Many short cachelines.
+Baseline approach with a memory access pattern that uses many short cachelines, which leads to poor memory transaction coalescing ([source](http://ppc.cs.aalto.fi/ch4/v0/)):
 
 ![](web/img/screen-v0.gif)
 
-Better coalesced memory transactions ([kernel source](http://ppc.cs.aalto.fi/ch4/v1/)).
-Few long cachelines.
+Slightly adjusted access pattern where thread warps are accessing consecutive memory addresses, leading to fewer, wider memory transactions ([source](http://ppc.cs.aalto.fi/ch4/v1/)):
 
 ![](web/img/screen-v1.gif)
+
+Reduced amount of memory accesses by reusing data in registers ([source](http://ppc.cs.aalto.fi/ch4/v2/)).
+The input data has been copied and transposed to enable a linear memory access pattern for both row- and column-wise accesses:
+
+![](web/img/screen-v2.gif)
+
+Buffering memory accesses through shared memory ([source](http://ppc.cs.aalto.fi/ch4/v3/)):
+
+![](web/img/screen-v3.gif)
 
 ## Quickstart
 
