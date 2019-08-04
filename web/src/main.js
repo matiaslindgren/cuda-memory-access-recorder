@@ -5,7 +5,7 @@ var memoryCanvasInput;
 var device;
 var drawing = false;
 var prevRenderFrameID;
-var memorySlotSize = 20;
+var memorySlotSize = 8;
 var accessPatterns;
 var currentCycle = 0;
 var memoryRowCount = 64;
