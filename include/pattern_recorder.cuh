@@ -471,9 +471,9 @@ public:
 			<< num_non_zero_elements << sep << "thread blocks did at least one memory access\n"
 			<< num_zero_elements << sep << "thread blocks did no memory accesses\n"
 			<< "for thread blocks that did at least one memory access:\n"
-			<< min_access_count << sep << "least amount of accesses\n"
+			<< min_access_count << sep << "min amount of accesses\n"
 			<< median << sep << "median amount of accesses\n"
-			<< max_access_count << sep << "most amount of accesses\n"
+			<< max_access_count << sep << "max amount of accesses\n"
 			<< "PatternRecorder will need:\n"
 			<< req_size_str << sep << "bytes on the device\n";
 	}
