@@ -14,9 +14,9 @@
 #include <cuda_runtime.h>
 
 // You can set the verbosity in your program before you include this header
-// 0 quiet (except when explicitly calling ostream write methods)
-// 1 informative
-// 2 insanity
+// 0 quiet        : Nothing is printed, except when calling the std::ostream dump methods
+// 1 informative  : Some host-side information is printed, also enables assertions
+// 2 insanity     : All device memory accesses are printed
 #ifndef PR_VERBOSITY
 #define PR_VERBOSITY 0
 #endif
@@ -85,6 +85,7 @@ class PatternRecorder {
 	int thread_idx_in_block;
 	// Linear index for a block within its grid.
 	int block_idx_in_grid;
+	bool enter_kernel_called;
 
 public:
 	__host__
@@ -97,7 +98,8 @@ public:
 		dimGrid(dimGrid),
 		block_idx_in_grid(0),
 		thread_idx_in_block(0),
-		is_master(true)
+		is_master(true),
+		enter_kernel_called(false)
 	{
 #if (PR_VERBOSITY > 0)
 		std::cerr << "Constructing PatternRecorder " << this << " for device data " << device_data << "\n";
@@ -116,9 +118,11 @@ public:
 			<< accesses_size << '\t' << "for memory access indexes\n"
 			<< processor_ids_size << '\t' << "for SM IDs\n";
 #endif
+#if (PR_VERBOSITY > 0)
 		assert(clocks_size > 0);
 		assert(accesses_size > 0);
 		assert(processor_ids_size > 0);
+#endif
 		if (total_memory_required > MAX_BYTES_WARNING_LIMIT) {
 			std::cerr
 				<< "Warning: PatternRecorder is trying to allocate " << total_memory_required << " bytes of device memory for storing memory accesses.\n"
@@ -151,7 +155,8 @@ public:
 		dimGrid(other.dimGrid),
 		block_idx_in_grid(0),
 		thread_idx_in_block(0),
-		is_master(false) // Makes destructor a no-op
+		is_master(false), // Makes destructor a no-op
+		enter_kernel_called(other.enter_kernel_called)
 	{
 	}
 
@@ -178,6 +183,7 @@ public:
 	// This function should be called once somewhere in the beginning of the kernel
 	__device__ __forceinline__
 	void enter_kernel() {
+		enter_kernel_called = true;
 		// Row-major order indexes of the current thread and block
 		thread_idx_in_block = (
 			threadIdx.x +
@@ -212,6 +218,9 @@ public:
 
 	__device__ __forceinline__
 	KernelDataType operator[](int idx) {
+#if (PR_VERBOSITY > 0)
+		assert(enter_kernel_called && "You need to call the enter_kernel member function once at the beginning of a kernel");
+#endif
 		// Record which data index was accessed.
 		accesses[buffer_idx] = idx;
 		// Record current SM clock cycle.
@@ -256,10 +265,12 @@ public:
 		bool no_separator = true;
 		for (int i = 0; i < num_accesses; ++i)
 		{
-			unsigned c = clocks[i];
 			int a = accesses[i];
+#if (PR_VERBOSITY > 0)
+			unsigned c = clocks[i];
 			// index a was never accessed <=> timestamp c is empty
 			assert((a != -1 || c == ~0u) && (a == -1 || c != ~0u));
+#endif
 			if (a != -1) {
 				// Index a was accessed at clock cycle c
 				if (no_separator) {
@@ -308,6 +319,7 @@ class AccessCounter {
 
 	const dim3 dimGrid;
 	const bool is_master;
+	bool enter_kernel_called;
 
 	int block_idx_in_grid;
 
@@ -318,7 +330,8 @@ public:
 		access_counters(nullptr),
 		dimGrid(dimGrid),
 		block_idx_in_grid(0),
-		is_master(true)
+		is_master(true),
+		enter_kernel_called(false)
 	{
 #if (PR_VERBOSITY > 0)
 		std::cerr << "Constructing AccessCounter " << this << " for device data " << device_data << "\n";
@@ -327,8 +340,8 @@ public:
 		const size_t access_counters_size = num_blocks * sizeof(unsigned long long);
 #if (PR_VERBOSITY > 0)
 		std::cerr << "Trying to allocate " << access_counters_size << " bytes on the device\n";
-#endif
 		assert(access_counters_size > 0);
+#endif
 		CHECK_CUDA_ERROR(cudaMallocManaged(&access_counters, access_counters_size));
 		CHECK_CUDA_ERROR(cudaDeviceSynchronize());
 		CHECK_CUDA_ERROR(cudaMemset(access_counters, 0, access_counters_size));
@@ -341,7 +354,8 @@ public:
 		access_counters(other.access_counters),
 		dimGrid(other.dimGrid),
 		block_idx_in_grid(0),
-		is_master(false)
+		is_master(false),
+		enter_kernel_called(other.enter_kernel_called)
 	{
 	}
 
@@ -365,6 +379,7 @@ public:
 
 	__device__ __forceinline__
 	void enter_kernel() {
+		enter_kernel_called = true;
 		block_idx_in_grid = (
 			blockIdx.x +
 			blockIdx.y * gridDim.x +
@@ -386,6 +401,9 @@ public:
 
 	__device__ __forceinline__
 	KernelDataType operator[](int idx) {
+#if (PR_VERBOSITY > 0)
+		assert(enter_kernel_called && "You need to call the enter_kernel member function once at the beginning of a kernel");
+#endif
 #if (PR_VERBOSITY > 1)
 		int thread_idx_in_block = (
 			threadIdx.x +
@@ -452,12 +470,12 @@ public:
 		out << "AccessCounter statistics:\n"
 			<< num_non_zero_elements << sep << "thread blocks did at least one memory access\n"
 			<< num_zero_elements << sep << "thread blocks did no memory accesses\n"
-			<< "Statistics for thread blocks that did at least one memory access:\n"
+			<< "for thread blocks that did at least one memory access:\n"
 			<< min_access_count << sep << "least amount of accesses\n"
 			<< median << sep << "median amount of accesses\n"
 			<< max_access_count << sep << "most amount of accesses\n"
-			<< "The amount of device memory required by an PatternRecorder instance to record all accesses would be:\n"
-			<< req_size_str << sep << "bytes\n";
+			<< "PatternRecorder will need:\n"
+			<< req_size_str << sep << "bytes on the device\n";
 	}
 };
 
