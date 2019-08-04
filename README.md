@@ -12,7 +12,7 @@ Many short cachelines.
 ![](web/img/screen-v0.gif)
 
 Better coalesced memory transactions ([kernel source](http://ppc.cs.aalto.fi/ch4/v1/)).
-Few longer cachelines.
+Few long cachelines.
 
 ![](web/img/screen-v1.gif)
 
@@ -33,7 +33,7 @@ You should now see the access pattern from the first gif.
 
 To use the v1 kernel, open [`examples/v0/main.cu`](examples/v0/main.cu) and define the `kernel_v1` macro instead of `kernel_v0`.
 
-## It doesn't work
+## If it does not work
 
 Some things to try:
 

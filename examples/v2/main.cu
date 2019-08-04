@@ -157,7 +157,7 @@ float next_float() {
 __host__
 int main() {
 	// Generate data
-	int n = 128;
+	int n = 64;
 	std::vector<float> matrix(n * n);
 	std::generate(matrix.begin(), matrix.end(), next_float);
 	std::vector<float> result(n * n);
