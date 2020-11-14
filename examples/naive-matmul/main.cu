@@ -45,7 +45,7 @@ void matrix_square(float* output_cpu, const float* input_cpu, std::size_t n) {
 	CHECK_CUDA_ERROR(cudaMalloc(&output_gpu, n * n * sizeof(float)));
 	CHECK_CUDA_ERROR(cudaMemcpy(input_gpu, input_cpu, n * n * sizeof(float), cudaMemcpyHostToDevice));
 
-	dim3 dimBlock(32, 32);
+	dim3 dimBlock(4, 4);
 	dim3 dimGrid(divup(n, dimBlock.x), divup(n, dimBlock.y));
 
 	unsigned long long max_access_count = 0u;
@@ -112,7 +112,7 @@ void dump_matrix(const std::vector<float>& v, std::size_t n, const std::string& 
 
 __host__
 int main() {
-	std::size_t n{6*32};
+	std::size_t n{4*32};
 	std::vector<float> matrix(n * n);
 	std::generate(matrix.begin(), matrix.end(), next_float);
 

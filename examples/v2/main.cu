@@ -125,6 +125,7 @@ void step(float* r, const float* d, int n) {
 		pr::AccessCounter<float> counter(dGPU, dimGrid);
 		mykernel<pr::AccessCounter<float> ><<<dimGrid, dimBlock>>>(rGPU, counter, n, nn);
 		CHECK(cudaDeviceSynchronize());
+		counter.dump_access_statistics(std::cout);
 		max_access_count = counter.get_max_access_count();
 	}
 	{
