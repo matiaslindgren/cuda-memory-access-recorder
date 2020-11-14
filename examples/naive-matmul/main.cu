@@ -1,4 +1,5 @@
 #include <cassert>
+#include <chrono>
 #include <fstream>
 #include <iostream>
 #include <iterator>
@@ -49,17 +50,32 @@ void matrix_square(float* output_cpu, const float* input_cpu, std::size_t n) {
 
 	unsigned long long max_access_count = 0u;
 	{
+		std::cout << "counting amount of memory accesses\n";
+		auto t0 = std::chrono::high_resolution_clock::now();
+
 		pr::AccessCounter<float> counter(input_gpu, dimGrid);
 		matrix_square_gpu<pr::AccessCounter<float> ><<<dimGrid, dimBlock>>>(output_gpu, counter, n);
 		CHECK_CUDA_ERROR(cudaDeviceSynchronize());
 		counter.dump_access_statistics(std::cout);
 		max_access_count = counter.get_max_access_count();
+
+		auto t1 = std::chrono::high_resolution_clock::now();
+		std::chrono::duration<double> dt = t1 - t0;
+		std::cout << "took " << dt.count() * 1e3 << " ms\n";
 	}
 
 	{
+		std::cout << "recording access pattern\n";
+		auto t0 = std::chrono::high_resolution_clock::now();
+
 		pr::PatternRecorder<float> recorder(input_gpu, dimGrid, max_access_count);
 		matrix_square_gpu<pr::PatternRecorder<float> ><<<dimGrid, dimBlock>>>(output_gpu, recorder, n);
 		CHECK_CUDA_ERROR(cudaDeviceSynchronize());
+
+		auto t1 = std::chrono::high_resolution_clock::now();
+		std::chrono::duration<double> dt = t1 - t0;
+		std::cout << "took " << dt.count() * 1e3 << " ms\n";
+
 		std::ofstream outf{patterns_out_path};
 		recorder.dump_json_results(outf, n, n);
 		std::cout << "Wrote " << patterns_out_path << "\n";
