@@ -39,7 +39,10 @@ function resetSize(element, newWidth, newHeight) {
 function groupAccessPatterns(accessPatterns, stepsPerCycle) {
 	const accessPatternGroups = new Map;
 	const allCycles = Array.from(accessPatterns.keys());
-	const maxCycle = Math.max.apply(null, allCycles);
+	let maxCycle = -1;
+	for (let c of allCycles) {
+		maxCycle = Math.max(c, maxCycle);
+	}
 	for (let cycle = 0; cycle <= maxCycle + stepsPerCycle; cycle += stepsPerCycle) {
 		const groupIndexes = new Set;
 		for (let c = 0; c < stepsPerCycle; ++c) {
