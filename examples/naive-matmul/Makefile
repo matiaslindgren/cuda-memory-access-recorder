@@ -1,4 +1,4 @@
-NVCC=/opt/cuda/bin/nvcc
+NVCC=nvcc
 NVCCFLAGS=--std=c++17 -O3 -I../../include
 MAIN_SRC=main.cu
 OUTPUT_DIR=bin
