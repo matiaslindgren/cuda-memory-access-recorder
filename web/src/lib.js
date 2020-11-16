@@ -120,6 +120,6 @@ class MemorySlot extends Drawable {
 	}
 
 	clear() {
-		this.changeFill(his.defaultColor);
+		this.changeFill(this.defaultColor);
 	}
 }
